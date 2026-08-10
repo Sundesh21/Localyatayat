@@ -110,24 +110,46 @@
   .np-play { width: 44px; height: 44px; font-size: 20px; background: #fff; color: #000; box-shadow: 0 10px 15px -3px rgba(0,0,0,.3); }
   .np-play:hover { transform: scale(1.05); }
   .np-btn:active, .np-play:active { transform: scale(.95); }
+
+  /* ---- small screens ---- */
+  @media (max-width: 640px) {
+    .np-links span, .np-pill-arrow { display: none; }   /* icons only, keeps clear of the centred counter */
+    .np-links { gap: 16px !important; right: 16px !important; }
+    .np-clock { left: 16px !important; }
+    .np-clock, .np-live, .np-links { top: 16px !important; font-size: 13px !important; }
+
+    .np-bar { bottom: 20px; width: calc(100vw - 24px); gap: 12px; padding: 10px 14px 10px 10px; }
+    .np-art { width: 60px; height: 60px; }
+    .np-title { font-size: 14px; }
+    .np-artist { font-size: 12px; }
+    .np-play { width: 40px; height: 40px; font-size: 18px; }
+    .np-time { font-size: 10px; }
+  }
+
+  /* phones in landscape: no room for a fat bar */
+  @media (max-height: 460px) {
+    .np-bar { bottom: 12px; padding: 8px 14px 8px 8px; }
+    .np-art { width: 48px; height: 48px; }
+    .np-seek, .np-time { display: none; }
+  }
 </style>
 <script src="./player.js"></script>
 </helmet>
-<div style="position: relative; width: 100vw; height: 100vh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed;">
+<div style="position: relative; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed;">
   <img src="uploads/hero-plated.jpg" alt="Deluxe Yatayat" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 22% 62%; display: block;">
   <div style="position: absolute; top: 0; left: 0; right: 0; height: 96px; background: linear-gradient(to bottom, rgba(22,24,38,.72) 0%, rgba(22,24,38,.34) 55%, rgba(22,24,38,0) 100%); pointer-events: none;"></div>
 
-  <div style="position: absolute; top: 22px; left: 24px; display: flex; align-items: baseline; font-size: 14px; letter-spacing: .02em; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
+  <div class="np-clock" style="position: absolute; top: 22px; left: 24px; display: flex; align-items: baseline; font-size: 14px; letter-spacing: .02em; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
     <span class="np-h">11</span><span class="np-blink">:</span><span class="np-m">56</span><span class="np-ap" style="opacity: .7; margin-left: 6px;">pm</span>
   </div>
 
-  <div style="position: absolute; top: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
+  <div class="np-live" style="position: absolute; top: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
     <span class="np-dot"><span></span><span></span></span>
     <span class="np-online" style="font-weight: 500;">30</span>
     <span style="opacity: .7;">online</span>
   </div>
 
-  <div style="position: absolute; top: 18px; right: 24px; display: flex; align-items: center; gap: 22px;">
+  <div class="np-links" style="position: absolute; top: 18px; right: 24px; display: flex; align-items: center; gap: 22px;">
     <a class="np-pill" href="https://open.spotify.com/playlist/4JQBFUNma3NLYxv5gomOgC" target="_blank" rel="noopener noreferrer" aria-label="Open on Spotify" style="display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
       <i class="ph-fill ph-spotify-logo" style="font-size: 21px; line-height: 1;"></i>
       <span>Spotify</span>
