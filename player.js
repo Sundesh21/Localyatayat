@@ -1,0 +1,309 @@
+(function () {
+  // "Local Bus Songs". With an API key the track list is read from YouTube at load,
+  // so songs you add there show up here. Without one it falls back to SEED below.
+  //
+  // Get a key: console.cloud.google.com -> new project -> enable "YouTube Data API
+  // v3" -> Credentials -> Create API key. Then restrict it: Application
+  // restrictions = Websites, add your domain. The key is public in this file by
+  // design; the referrer lock is what protects it. Read-only, 10k units/day, this
+  // page costs ~2 per load.
+  var PLAYLIST = 'PLLxpFTKZn2m4';
+  var API_KEY  = 'AIzaSyC5PC5mpu-cSvdSS0picxAAcOq2BNpZidk';
+
+  // Fallback list, scraped 2026-08-10. Only used when API_KEY is empty or the API
+  // call fails, so the bar still works — but it goes stale as you add songs.
+  var SEED = ('wxmehzGmN9s lk7BxjtcyOI Aamfn3EbwRY AQOePOhaQbY 8XREXBOz-uA FCuexgI4-1c 8y8RY8B7ysc ' +
+    'egUCvaH6lBU 1wDTlODN3EQ JFpK7Aftbq0 n_Q0wKciERU Wq2OUZeOWzI AUt3eBCJGtM c28vnSbz4vM d9KhkkDyo-0 ' +
+    '3Fvr3O_04xg Lbvu2MzXThg ULRRhP4lJJI QDmpje6sZAA UOCNEwoJtS0 PTVkQJLiDRk HCkKWDyD6QE Lb5z3z6mePM ' +
+    'wI-vd4b7lQk dZ8F53AnneI OyRsGmJ4S-I Hl2lnqYvheY DqN0PhgGgWg uz_owah2x28 5wxm1PAv3cE KnZmRLmfRV4 ' +
+    'JolHTx7keZQ nd8i8qEkmiQ 0ESbyyvSjCQ 9YTwUq3tO2M SHkPWbcLQLI vsCicatFEew FIFnap6epu0 KbPpYnPotGY ' +
+    '1evIx_F-0I4 AxmU5eI3-TM ohVlUzX5abo oHA9pNK1xL8 Xt-7UhRCDmc mRBhF994L-g').split(' ');
+
+  // Songs to drop by hand — paste a video id in here and it never gets queued.
+  var DROP = [];
+
+  // Songs dropped automatically. A track is only recorded here when YouTube says
+  // the video itself is the problem: 100 = deleted/private, 101 & 150 = the owner
+  // disabled embedding. Errors 2, 5 and 153 are player/page problems, not the
+  // song's fault, so they never blocklist anything — otherwise one bad page load
+  // (e.g. opening over file://) would wipe out the whole playlist permanently.
+  // To reset: localStorage.removeItem('np-blocked')
+  var KEY = 'np-blocked', BAD = {};
+  try { (JSON.parse(localStorage.getItem(KEY) || '[]')).forEach(function (i) { BAD[i] = 1; }); } catch (e) {}
+  DROP.forEach(function (i) { BAD[i] = 1; });
+
+  function blocklist(id) {
+    if (BAD[id]) return;
+    BAD[id] = 1;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(Object.keys(BAD)));
+    } catch (e) {}
+  }
+
+  var el = {}, yt = null, playing = false, curId = null;
+  var IDS = [], idx = 0, misses = 0, everPlayed = false;
+  // `muted` = visitor pressed pause; `kicked` = someone has interacted, so audio is
+  // allowed to start and the stall watchdog is armed.
+  var muted = false, kicked = false, lastT = -1, stalled = 0;
+
+  function fmt(s) {
+    s = Math.max(0, Math.floor(s || 0));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  // Raw YouTube titles are messy ("Song - Artist | Label | 2082"). Trim everything
+  // after the first pipe, then split off the artist. `- Topic` channels are YouTube's
+  // auto-generated album uploads and already have a clean title + artist.
+  function split(raw, author) {
+    var main = (raw || '').split('|')[0].trim();
+    var artist = (author || '').replace(/\s*-\s*Topic$/, '');
+    var i = main.lastIndexOf(' - ');
+    if (i > 0) { artist = main.slice(i + 3).trim(); main = main.slice(0, i).trim(); }
+    return { title: main, artist: artist };
+  }
+
+  // In API mode `seen` is prefilled from the API's snippet. In SEED mode it starts
+  // empty and gets filled lazily from oEmbed (CORS-open, no key needed).
+  var seen = {};
+  function show(id, m) {
+    el.cover.src = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+    el.cover.alt = m.title + ' artwork';
+    el.title.textContent = m.title;
+    el.artist.textContent = m.artist;
+  }
+
+  function paint() {
+    var id = IDS[idx];
+    if (!id || id === curId) return;
+    curId = id;
+    if (seen[id]) return show(id, seen[id]);
+    fetch('https://www.youtube.com/oembed?format=json&url=' +
+          encodeURIComponent('https://www.youtube.com/watch?v=' + id))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j) return;
+        seen[id] = split(j.title, j.author_name);
+        if (curId === id) show(id, seen[id]);        // ignore if we've moved on
+      })
+      .catch(function () {});
+  }
+
+  function go(n) {
+    if (!IDS.length) return;
+    idx = (n + IDS.length) % IDS.length;   // wraps, so the playlist never runs out
+    everPlayed = false;
+    lastT = -1;
+    stalled = 0;
+    paint();
+    if (yt) yt.loadVideoById(IDS[idx]);
+  }
+
+  // Read the playlist via the Data API: page through the items, then ask videos.list
+  // for titles and — the part that matters here — status.embeddable, so tracks that
+  // would fail mid-playback are dropped up front instead of being skipped noisily.
+  function keep(list) {
+    var out = list.filter(function (id) { return !BAD[id]; });
+    return out.length ? out : list;      // never end up with an empty player
+  }
+
+  // Fisher-Yates, in place. Shuffled once per visit so two people opening the page
+  // don't get the same song, and so the order differs on a reload.
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)), t = a[i];
+      a[i] = a[j];
+      a[j] = t;
+    }
+    return a;
+  }
+
+  function loadList(done) {
+    if (!API_KEY) { IDS = keep(SEED); return done(); }
+    var ids = [];
+    var get = function (path, params) {
+      return fetch('https://www.googleapis.com/youtube/v3/' + path + '?key=' + API_KEY + '&' + params)
+        .then(function (r) { if (!r.ok) throw 0; return r.json(); });
+    };
+    (function page(token) {
+      get('playlistItems', 'part=contentDetails&maxResults=50&playlistId=' + PLAYLIST +
+                           (token ? '&pageToken=' + token : ''))
+        .then(function (j) {
+          (j.items || []).forEach(function (it) { ids.push(it.contentDetails.videoId); });
+          if (j.nextPageToken) return page(j.nextPageToken);
+          // videos.list takes at most 50 ids per call.
+          var chunks = [], i;
+          for (i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+          return Promise.all(chunks.map(function (c) {
+            return get('videos', 'part=snippet,status&id=' + c.join(','));
+          })).then(function (rs) {
+            var ok = {};
+            rs.forEach(function (r) {
+              (r.items || []).forEach(function (v) {
+                if (!v.status.embeddable || v.status.privacyStatus === 'private') return;
+                ok[v.id] = true;
+                seen[v.id] = split(v.snippet.title, v.snippet.channelTitle);
+              });
+            });
+            IDS = keep(ids.filter(function (id) { return ok[id]; }));   // keep playlist order
+            if (!IDS.length) IDS = keep(SEED);
+            done();
+          });
+        })
+        .catch(function () { IDS = SEED.slice(); done(); });
+    })('');
+  }
+
+  function clock() {
+    var d = new Date(), h = d.getHours();
+    el.h.textContent = (h % 12) || 12;
+    el.m.textContent = String(d.getMinutes()).padStart(2, '0');
+    el.ap.textContent = h < 12 ? 'am' : 'pm';
+  }
+
+  // Decorative, exactly like saloon.wtf's: a random walk that drifts toward ~36.
+  // Real presence would need a backend — see the note in chat.
+  function presence() {
+    var n = 30;
+    (function step() {
+      setTimeout(function () {
+        var up = Math.random() < (n < 36 ? .58 : .42) ? 1 : -1;
+        n = Math.max(14, Math.min(58, n + up * (1 + Math.floor(Math.random() * 3))));
+        el.online.textContent = n;
+        step();
+      }, 2500 + Math.random() * 3500);
+    })();
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    el.bar.classList.toggle('is-playing', on);
+    el.icon.className = on ? 'ph-fill ph-pause' : 'ph-fill ph-play';
+    el.play.setAttribute('aria-label', on ? 'Pause' : 'Play');
+  }
+
+  function tick() {
+    if (!yt || !yt.getDuration) return;
+    var d = yt.getDuration() || 0, c = yt.getCurrentTime() || 0;
+    var pct = d ? (c / d) * 100 : 0;
+    el.fill.style.width = pct + '%';
+    el.seek.setAttribute('aria-valuenow', Math.round(pct));
+    el.time.textContent = fmt(c) + ' / ' + fmt(d);
+
+    // It has to keep playing. If the clock hasn't moved for 15s once someone has
+    // interacted — dead stream, silent stall, a track that never starts — give up
+    // on it and move to the next rather than sitting there forever. This covers the
+    // first song failing to start, not just one dying mid-way.
+    if (muted || !kicked) { stalled = 0; return; }
+    if (c > lastT + 0.01) { lastT = c; stalled = 0; }
+    else if (++stalled > 60) {
+      stalled = 0;
+      console.warn('[player] stalled on', IDS[idx], '- moving on');
+      go(idx + 1);
+    }
+  }
+
+  (function ready() {
+    var bar = document.querySelector('.np-bar');
+    if (!bar || !document.getElementById('np-yt')) return setTimeout(ready, 50);
+
+    var q = function (s) { return bar.querySelector(s); }, d = function (s) { return document.querySelector(s); };
+    el = { bar: bar, cover: q('.np-disc img'), title: q('.np-title'), artist: q('.np-artist'),
+           seek: q('.np-seek'), fill: q('.np-fill'), knob: q('.np-knob'), time: q('.np-time'),
+           play: q('.np-play'), icon: q('.np-play i'),
+           h: d('.np-h'), m: d('.np-m'), ap: d('.np-ap'), online: d('.np-online') };
+
+    clock();
+    setInterval(clock, 1000);
+    presence();
+
+    // YouTube embeds need a real http(s) origin. Opened straight off disk the
+    // player gets no referrer, every video fails with error 153, and the bar just
+    // races through the playlist. Nothing to fix in code — the page has to be
+    // served. `cd` to this folder and run: python3 -m http.server 8000
+    if (location.protocol === 'file:') {
+      el.title.textContent = 'Serve this page over http://';
+      el.artist.textContent = 'YouTube will not play from file://';
+      el.time.textContent = 'python3 -m http.server 8000';
+      return;
+    }
+
+    // The only control anyone gets. It exists because a page that plays audio with
+    // no way to silence it is hostile (and fails WCAG 1.4.2) — not so visitors can
+    // pick songs. Nothing here chooses a track.
+    el.play.onclick = function () {
+      if (!yt) return;
+      if (playing) { muted = true; yt.pauseVideo(); }
+      else { muted = false; kicked = true; yt.playVideo(); }
+    };
+
+    // Browsers refuse to start audio without a gesture, so the first touch anywhere
+    // on the page is the ignition. Once it's running these come off.
+    function kick() {
+      if (!yt || muted) return;
+      kicked = true;
+      yt.playVideo();
+    }
+    document.addEventListener('pointerdown', kick);
+    document.addEventListener('keydown', kick);
+    window.__npUnkick = function () {
+      document.removeEventListener('pointerdown', kick);
+      document.removeEventListener('keydown', kick);
+    };
+
+    setInterval(tick, 250);
+
+    // Debug hook: run npState() in the console to see what the radio thinks.
+    window.npState = function () {
+      return { kicked: kicked, muted: muted, playing: playing, everPlayed: everPlayed,
+               stalled: stalled, lastT: lastT, idx: idx, tracks: IDS.length,
+               now: yt && yt.getCurrentTime && yt.getCurrentTime() };
+    };
+
+    // The player needs the track list before it can be built, and the IFrame API
+    // arrives on its own schedule, so wait for both.
+    var apiUp = false, listUp = false;
+    function boot() {
+      if (!apiUp || !listUp || yt) return;
+      shuffle(IDS);
+      paint();
+      yt = new YT.Player('np-yt', {
+        videoId: IDS[idx],
+        playerVars: { playsinline: 1, controls: 0, disablekb: 1, origin: location.origin },
+        events: {
+          onStateChange: function (e) {
+            if (e.data === YT.PlayerState.PLAYING) {
+              misses = 0; everPlayed = true;
+              if (window.__npUnkick) { window.__npUnkick(); window.__npUnkick = null; }
+            }
+            if (e.data === YT.PlayerState.ENDED) {
+              // Only advance if the track actually played. A stream that dies can
+              // report ENDED without ever starting, which would cascade the whole
+              // playlist in a couple of seconds. The watchdog in tick() covers that.
+              if (!everPlayed) { setPlaying(false); return; }
+              return go(idx + 1);
+            }
+            // Paused by something other than the visitor (tab throttling, YouTube
+            // hiccup)? It's a radio — start it again.
+            if (e.data === YT.PlayerState.PAUSED && !muted) { yt.playVideo(); return; }
+            setPlaying(e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING);
+          },
+          // A track that won't load would otherwise stall the bar. Skip it — but
+          // stop after a full lap so a systemic failure can't spin forever.
+          onError: function (e) {
+            var id = IDS[idx], perm = (e.data === 100 || e.data === 101 || e.data === 150);
+            if (perm) blocklist(id);
+            console.warn('[player] skipped', id, 'YouTube error', e.data,
+                         perm ? '(dropped for good)' : '(page/player problem, keeping it)');
+            if (++misses < IDS.length) go(idx + 1); else setPlaying(false);
+          }
+        }
+      });
+    }
+
+    loadList(function () { listUp = true; boot(); });
+    window.onYouTubeIframeAPIReady = function () { apiUp = true; boot(); };
+    var s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(s);
+  })();
+})();

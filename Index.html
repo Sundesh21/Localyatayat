@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deluxe Yatayat</title>
+<meta name="description" content="Nepali bangers that play in the local bus.">
+<meta name="theme-color" content="#161826">
+
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+<meta property="og:title" content="Deluxe Yatayat">
+<meta property="og:description" content="Nepali bangers that play in the local bus.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="./uploads/hero-plated.jpg">
+<meta name="twitter:card" content="summary_large_image">
+
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-8b7f28e1-6cd6-4c0d-a0b0-9e23a469c7d6/styles.css">
+<script src="_ds/nocturne-8b7f28e1-6cd6-4c0d-a0b0-9e23a469c7d6/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #161826; }
+  a { color: #e9e9ed; text-decoration: none; }
+  a:hover { color: #ffffff; }
+
+  /* ---- now-playing bar (geometry copied from saloon.wtf) ---- */
+  /* 1px, in-viewport, invisible — YouTube throttles players it thinks are off-screen. */
+  .np-yt { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+
+  .np-bar {
+    position: absolute; left: 50%; bottom: 8vh; transform: translateX(-50%);
+    width: min(576px, calc(100vw - 48px));
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px 12px 12px;
+    border-radius: 9999px;
+    background: rgba(255,255,255,.10);
+    backdrop-filter: blur(40px) saturate(150%);
+    -webkit-backdrop-filter: blur(40px) saturate(150%);
+    border: 1px solid rgba(255,255,255,.20);
+    box-shadow: 0 8px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.25);
+    box-sizing: border-box;
+  }
+
+  .np-art { position: relative; width: 80px; height: 80px; flex: none; }
+  .np-disc {
+    width: 100%; height: 100%; overflow: hidden; border-radius: 9999px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 10px 15px -3px rgba(0,0,0,.3);
+    animation: np-spin 8s linear infinite; animation-play-state: paused;
+  }
+  .np-bar.is-playing .np-disc { animation-play-state: running; }
+  .np-disc img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  @keyframes np-spin { to { transform: rotate(360deg); } }
+  .np-spindle {
+    position: absolute; left: 50%; top: 50%; width: 12px; height: 12px;
+    transform: translate(-50%,-50%); border-radius: 9999px;
+    background: rgba(0,0,0,.7); box-shadow: 0 0 0 2px rgba(255,255,255,.4);
+    pointer-events: none;
+  }
+
+  .np-meta { flex: 1; min-width: 0; }
+  .np-title, .np-artist { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .np-title { font-size: 15px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .np-artist { font-size: 13px; color: rgba(255,255,255,.7); }
+
+  /* display only — the bus doesn't let you scrub */
+  .np-seek { position: relative; width: 100%; height: 8px; margin-top: 8px; pointer-events: none; }
+  .np-track {
+    position: absolute; left: 0; right: 0; top: 50%; height: 4px; transform: translateY(-50%);
+    overflow: hidden; border-radius: 9999px; background: rgba(255,255,255,.2);
+  }
+  .np-fill { width: 0; height: 100%; border-radius: 9999px; background: rgba(255,255,255,.9); }
+  .np-knob {
+    position: absolute; top: 50%; left: 0; width: 12px; height: 12px;
+    transform: translate(-50%,-50%); border-radius: 9999px; background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.3); opacity: 0; transition: opacity .15s; pointer-events: none;
+  }
+  .np-knob { display: none; }
+  .np-time { margin-top: 6px; font-size: 11px; font-variant-numeric: tabular-nums; color: rgba(255,255,255,.6); }
+
+  /* live clock + presence dot */
+  @keyframes np-blink { 50% { opacity: 0; } }
+  @keyframes np-ping { 75%, 100% { transform: scale(2); opacity: 0; } }
+  .np-blink { animation: np-blink 1s step-end infinite; }
+  .np-dot { position: relative; display: flex; width: 10px; height: 10px; }
+  .np-dot span { position: absolute; inset: 0; border-radius: 9999px; background: #4ade80; }
+  .np-dot span:first-child { animation: np-ping 1s cubic-bezier(0,0,.2,1) infinite; opacity: .75; }
+  .np-dot span:last-child { box-shadow: 0 0 8px rgba(74,222,128,.9); }
+
+  /* top-right playlist links */
+  .np-pill { transition: opacity .15s, transform .15s; }
+  .np-pill:hover { opacity: .8; }
+  .np-pill:active { transform: scale(.95); }
+  .np-pill:hover .np-pill-arrow { opacity: .9; }
+
+  .np-ctrls { display: flex; align-items: center; gap: 4px; flex: none; }
+  .np-btn, .np-play {
+    display: grid; place-items: center; border: 0; border-radius: 9999px;
+    padding: 0; cursor: pointer; transition: background .15s, color .15s, transform .15s;
+  }
+  .np-btn { width: 36px; height: 36px; font-size: 18px; background: transparent; color: rgba(255,255,255,.8); }
+  .np-btn:hover { background: rgba(255,255,255,.15); color: #fff; }
+  .np-play { width: 44px; height: 44px; font-size: 20px; background: #fff; color: #000; box-shadow: 0 10px 15px -3px rgba(0,0,0,.3); }
+  .np-play:hover { transform: scale(1.05); }
+  .np-btn:active, .np-play:active { transform: scale(.95); }
+</style>
+<script src="./player.js"></script>
+</helmet>
+<div style="position: relative; width: 100vw; height: 100vh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed;">
+  <img src="uploads/hero-plated.jpg" alt="Deluxe Yatayat" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 22% 62%; display: block;">
+  <div style="position: absolute; top: 0; left: 0; right: 0; height: 96px; background: linear-gradient(to bottom, rgba(22,24,38,.72) 0%, rgba(22,24,38,.34) 55%, rgba(22,24,38,0) 100%); pointer-events: none;"></div>
+
+  <div style="position: absolute; top: 22px; left: 24px; display: flex; align-items: baseline; font-size: 14px; letter-spacing: .02em; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
+    <span class="np-h">11</span><span class="np-blink">:</span><span class="np-m">56</span><span class="np-ap" style="opacity: .7; margin-left: 6px;">pm</span>
+  </div>
+
+  <div style="position: absolute; top: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
+    <span class="np-dot"><span></span><span></span></span>
+    <span class="np-online" style="font-weight: 500;">30</span>
+    <span style="opacity: .7;">online</span>
+  </div>
+
+  <div style="position: absolute; top: 18px; right: 24px; display: flex; align-items: center; gap: 22px;">
+    <a class="np-pill" href="https://open.spotify.com/playlist/4JQBFUNma3NLYxv5gomOgC" target="_blank" rel="noopener noreferrer" aria-label="Open on Spotify" style="display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
+      <i class="ph-fill ph-spotify-logo" style="font-size: 21px; line-height: 1;"></i>
+      <span>Spotify</span>
+      <i class="ph ph-arrow-up-right np-pill-arrow" style="font-size: 12px; opacity: .55;"></i>
+    </a>
+    <a class="np-pill" href="https://music.youtube.com/playlist?list=PLLxpFTKZn2m4" target="_blank" rel="noopener noreferrer" aria-label="Open on YouTube Music" style="display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
+      <i class="ph-fill ph-youtube-logo" style="font-size: 21px; line-height: 1;"></i>
+      <span>YT Music</span>
+      <i class="ph ph-arrow-up-right np-pill-arrow" style="font-size: 12px; opacity: .55;"></i>
+    </a>
+  </div>
+
+  <div class="np-yt"><div id="np-yt"></div></div>
+
+  <div class="np-bar">
+    <div class="np-art">
+      <div class="np-disc"><img alt=""></div>
+      <span class="np-spindle"></span>
+    </div>
+    <div class="np-meta">
+      <p class="np-title">Local Bus Songs</p>
+      <p class="np-artist">Loading playlist…</p>
+      <div class="np-seek" role="slider" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="np-track"><div class="np-fill"></div></div>
+        <div class="np-knob"></div>
+      </div>
+      <div class="np-time">0:00 / 0:00</div>
+    </div>
+    <div class="np-ctrls">
+      <button type="button" class="np-play" aria-label="Play"><i class="ph-fill ph-play"></i></button>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
