@@ -12,6 +12,7 @@
 
 <meta property="og:title" content="Deluxe Yatayat">
 <meta property="og:description" content="Nepali bangers that play in the local bus.">
+
 <meta property="og:type" content="website">
 <meta property="og:image" content="./uploads/hero-plated.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -111,6 +112,35 @@
   .np-play:hover { transform: scale(1.05); }
   .np-btn:active, .np-play:active { transform: scale(.95); }
 
+  /* ---- hero ----
+     Same frame on every device. The lettering is painted into the jpg (spanning
+     35%–64.5% of its width) so it can only shrink together with the picture: a
+     screen-filling cover-crop holds all of it while viewport w/h >= ~0.65, and
+     below that the image pulls back until the words fit, centred. */
+  .hero-blur { display: none; }
+  @media (max-aspect-ratio: 13/20) {
+    /* the photo itself fills whatever the letterboxed copy leaves above and below:
+       a screen-filling, blurred, dimmed crop of the left of the frame (the bus —
+       no lettering there, so nothing smears into a bright blob) */
+    .hero-blur {
+      display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; object-position: 0% 50%;
+      filter: blur(36px) brightness(.62) saturate(1.1);
+      transform: scale(1.12);                       /* hides the blur's soft edges */
+    }
+    .hero-img {
+      height: 155vw !important;                     /* 100vw / (155vw * 1.89) = 34% of the frame in view */
+      /* flush to the top like the reference: the words sit at 32.4% of the image
+         height, which lands them 23% down a 430x932 screen — the reference has
+         its title at 22%. Player bar rides the strip below. */
+      top: 0 !important; bottom: auto !important;
+      object-position: 50% 50% !important;          /* words are centred on 49.75% of the width */
+      /* melt the bottom edge into the blurred continuation so there is no seam */
+      -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+      mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+    }
+  }
+
   /* ---- small screens ---- */
   @media (max-width: 640px) {
     .np-links span, .np-pill-arrow { display: none; }   /* icons only, keeps clear of the centred counter */
@@ -118,12 +148,8 @@
     .np-clock { left: 16px !important; }
     .np-clock, .np-live, .np-links { top: 16px !important; font-size: 13px !important; }
 
-    .np-bar { bottom: 20px; width: calc(100vw - 24px); gap: 12px; padding: 10px 14px 10px 10px; }
-    .np-art { width: 60px; height: 60px; }
-    .np-title { font-size: 14px; }
-    .np-artist { font-size: 12px; }
-    .np-play { width: 40px; height: 40px; font-size: 18px; }
-    .np-time { font-size: 10px; }
+    /* reference keeps the bar at full size (80px disc, bottom: 8vh) — only the width adapts */
+    .np-bar { width: calc(100vw - 24px); }
   }
 
   /* phones in landscape: no room for a fat bar */
@@ -136,7 +162,8 @@
 <script src="./player.js"></script>
 </helmet>
 <div style="position: relative; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed;">
-  <img src="uploads/hero-plated.jpg" alt="Deluxe Yatayat" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 22% 62%; display: block;">
+  <img class="hero-blur" src="uploads/hero-plated.jpg" alt="" aria-hidden="true">
+  <img class="hero-img" src="uploads/hero-plated.jpg" alt="Deluxe Yatayat" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 55%; display: block;">
   <div style="position: absolute; top: 0; left: 0; right: 0; height: 96px; background: linear-gradient(to bottom, rgba(22,24,38,.72) 0%, rgba(22,24,38,.34) 55%, rgba(22,24,38,0) 100%); pointer-events: none;"></div>
 
   <div class="np-clock" style="position: absolute; top: 22px; left: 24px; display: flex; align-items: baseline; font-size: 14px; letter-spacing: .02em; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
