@@ -17,6 +17,24 @@
 <meta property="og:image" content="./uploads/hero-plated.jpg">
 <meta name="twitter:card" content="summary_large_image">
 
+<!--
+  support.js hardcodes React's unpkg URLs (see its cdnScriptFor / REACT_URL), but
+  looks each one up in window.__resources first and uses that string as the script
+  src when present. Pointing them at vendored copies needs no patch to that
+  generated file — it just has to be set before support.js runs, hence this being
+  above it. Both files were checked against the SRI hashes support.js pins, so
+  they are byte-identical to what it would have fetched; integrity is dropped on
+  this path, which is moot for same-origin. React is MIT, licence alongside.
+
+  Babel (also listed there) is deliberately not vendored: it is fetched lazily and
+  only for JSX, which this page has none of, so it is never requested.
+-->
+<script>
+  window.__resources = Object.assign(window.__resources || {}, {
+    "https://unpkg.com/react@18.3.1/umd/react.production.min.js": "./vendor/react-18.3.1/react.production.min.js",
+    "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js": "./vendor/react-18.3.1/react-dom.production.min.js"
+  });
+</script>
 <script src="./support.js"></script>
 
 <!-- three.js, pinned exactly as three-d-stage.js requires. This must live in the
