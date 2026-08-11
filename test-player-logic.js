@@ -85,4 +85,38 @@ assert.strictEqual(wrap(44 + 1, 45), 0, 'next at the last track must wrap to the
 assert.strictEqual(wrap(3 + 1, 45), 4);
 assert.strictEqual(wrap(3 - 1, 45), 2);
 
+// --- dashboard: speed easing, status thresholds, road-loop formula ---
+const CRUISE = 54, STATUS = ['depot', 'pulling', 'highway'];
+const step = k => { const d = k.want - k.at; k.at = Math.abs(d) < 0.4 ? k.want : k.at + d * 0.05; return k; };
+const label = v => STATUS[v < 1 ? 0 : v < 32 ? 1 : 2];
+const metres = (at, dt) => (at / 3.6) * dt;   // km/h -> metres this frame
+
+// pulling away: converges up to cruise, never overshoots
+let k = { at: 0, want: CRUISE }, n = 0;
+while (k.at !== CRUISE && n++ < 5000) { step(k); assert.ok(k.at <= CRUISE, 'speed overshot cruise'); }
+assert.strictEqual(k.at, CRUISE, 'never reached cruise speed');
+assert.ok(n < 400, `took ${n} ticks (~${(n * 0.09).toFixed(1)}s) to reach cruise — too slow`);
+
+// braking: converges back to a dead stop, never below zero
+k = { at: CRUISE, want: 0 }; n = 0;
+while (k.at !== 0 && n++ < 5000) { step(k); assert.ok(k.at >= 0, 'speed went negative'); }
+assert.strictEqual(k.at, 0, 'never came to a full stop');
+
+assert.strictEqual(label(0), 'depot');
+assert.strictEqual(label(31), 'pulling');
+assert.strictEqual(label(32), 'highway');
+assert.strictEqual(label(CRUISE), 'highway');
+
+// The 3D stage converts the speedometer to metres travelled per frame, then
+// scrolls the highway tiles and rolls the wheels by that distance.
+assert.strictEqual(metres(0, 0.016), 0, 'a stopped bus must not move the road');
+assert.ok(metres(54, 1) > 14.9 && metres(54, 1) < 15.1, '54 km/h should be ~15 m/s');
+for (let v = 0; v < CRUISE; v++) {
+  assert.ok(metres(v + 1, 0.016) > metres(v, 0.016), `road not scrolling faster at ${v} km/h`);
+}
+// wheel radius 0.55 m in bus.js — one revolution per 2*pi*r metres
+const WHEEL_R = 0.55;
+const revs = m => m / WHEEL_R / (2 * Math.PI);
+assert.ok(Math.abs(revs(2 * Math.PI * WHEEL_R) - 1) < 1e-9, 'wheel must turn exactly once per circumference');
+
 console.log('all checks passed');

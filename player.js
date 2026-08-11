@@ -248,6 +248,53 @@
     el.bar.classList.toggle('is-playing', on);
     el.icon.className = on ? 'ph-fill ph-pause' : 'ph-fill ph-play';
     el.play.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    kmh.want = on ? CRUISE : 0;      // the bus pulls away / rolls to a stop with the music
+  }
+
+  // ---- conductor's dashboard ----
+  // The speedometer is the one number everything else hangs off: it eases toward a
+  // target rather than snapping, and the road markings take their loop time from it,
+  // so the tarmac visibly picks up speed as the bus does.
+  var CRUISE = 54, kmh = { at: 0, want: 0 };
+  var STATUS = ['बस डिपोमै छ', 'बिस्तारै गुड्दै', 'पृथ्वी राजमार्गमा'];
+
+  function dash() {
+    var d = kmh.want - kmh.at;
+    kmh.at = Math.abs(d) < 0.4 ? kmh.want : kmh.at + d * 0.05;
+    var v = Math.round(kmh.at);
+    if (el.kmh) el.kmh.textContent = v;
+    if (el.status) el.status.textContent = STATUS[v < 1 ? 0 : v < 32 ? 1 : 2];
+    // The 3D stage reads this every frame to scroll the highway and spin the
+    // wheels, so the scene rolls to a stop with the speedometer rather than
+    // freezing. Publishing a number beats reaching into this closure.
+    window.__kmh = kmh.at;
+  }
+
+  // Two detuned saws through a lowpass — a passable air horn, and no audio file to
+  // ship. Built on click, which is also the gesture browsers need to allow audio.
+  var actx = null;
+  function horn() {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      var t = actx.currentTime, g = actx.createGain(), lp = actx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1700;
+      lp.connect(actx.destination);
+      g.connect(lp);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.15, t + 0.04);
+      g.gain.setValueAtTime(0.15, t + 0.42);
+      g.gain.linearRampToValueAtTime(0, t + 0.6);
+      [370, 466].forEach(function (f) {
+        var o = actx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.connect(g);
+        o.start(t);
+        o.stop(t + 0.62);
+      });
+    } catch (e) {}
   }
 
   function tick() {
@@ -280,11 +327,19 @@
            seek: q('.np-seek'), fill: q('.np-fill'), knob: q('.np-knob'), time: q('.np-time'),
            play: q('.np-play'), icon: q('.np-play i'),
            prev: q('.np-prev'), next: q('.np-next'),
-           h: d('.np-h'), m: d('.np-m'), ap: d('.np-ap'), online: d('.np-online') };
+           h: d('.np-h'), m: d('.np-m'), ap: d('.np-ap'), online: d('.np-online'),
+           kmh: d('.dash-kmh'), status: d('.dash-status'), horn: d('.dash-horn') };
 
     clock();
     setInterval(clock, 1000);
     presence();
+    dash();
+    setInterval(dash, 90);
+    if (el.horn) el.horn.onclick = function () {
+      horn();
+      el.horn.classList.add('is-blaring');
+      setTimeout(function () { el.horn.classList.remove('is-blaring'); }, 620);
+    };
 
     // YouTube embeds need a real http(s) origin. Opened straight off disk the
     // player gets no referrer, every video fails with error 153, and the bar just

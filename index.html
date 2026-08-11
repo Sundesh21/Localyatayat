@@ -18,6 +18,29 @@
 <meta name="twitter:card" content="summary_large_image">
 
 <script src="./support.js"></script>
+
+<!-- three.js, pinned exactly as three-d-stage.js requires. This must live in the
+     real <head>, not in <helmet>: an import map has to be parsed before any module
+     loads, and support.js re-creates <helmet> scripts (which would also run
+     customElements.define twice and throw). -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js",
+    "three/addons/exporters/OBJExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js",
+    "three/addons/exporters/GLTFExporter.js": "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT",
+    "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js": "sha384-4rziNxOBZKQ69i+w+f89KJ55TCYquwchVbByQwmaOeIOXdOU2PLDn3kOfXHwIJC9",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/OBJExporter.js": "sha384-nbwtoZENJD3Vq+ACK0CuGQdPMuDWHkamC2KJD70EV5nfg6jQjfppKOea07YJN+N3",
+    "https://unpkg.com/three@0.184.0/examples/jsm/exporters/GLTFExporter.js": "sha384-VofkvpG6HERhFCYbsUOHeNXBCqID2nfqkQqnVzE1jc/oPcz+qJ13ADdXH08hE+cQ"
+  }
+}
+</script>
+<script src="./three-d-stage.js"></script>
 </head>
 <body>
 <x-dc>
@@ -112,33 +135,70 @@
   .np-play:hover { transform: scale(1.05); }
   .np-btn:active, .np-play:active { transform: scale(.95); }
 
-  /* ---- hero ----
-     Same frame on every device. The lettering is painted into the jpg (spanning
-     35%–64.5% of its width) so it can only shrink together with the picture: a
-     screen-filling cover-crop holds all of it while viewport w/h >= ~0.65, and
-     below that the image pulls back until the words fit, centred. */
-  .hero-blur { display: none; }
-  @media (max-aspect-ratio: 13/20) {
-    /* the photo itself fills whatever the letterboxed copy leaves above and below:
-       a screen-filling, blurred, dimmed crop of the left of the frame (the bus —
-       no lettering there, so nothing smears into a bright blob) */
-    .hero-blur {
-      display: block; position: absolute; inset: 0; width: 100%; height: 100%;
-      object-fit: cover; object-position: 0% 50%;
-      filter: blur(36px) brightness(.62) saturate(1.1);
-      transform: scale(1.12);                       /* hides the blur's soft edges */
-    }
-    .hero-img {
-      height: 155vw !important;                     /* 100vw / (155vw * 1.89) = 34% of the frame in view */
-      /* flush to the top like the reference: the words sit at 32.4% of the image
-         height, which lands them 23% down a 430x932 screen — the reference has
-         its title at 22%. Player bar rides the strip below. */
-      top: 0 !important; bottom: auto !important;
-      object-position: 50% 50% !important;          /* words are centred on 49.75% of the width */
-      /* melt the bottom edge into the blurred continuation so there is no seam */
-      -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-      mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-    }
+  /* ---- conductor's dashboard ---- */
+  .dev { font-family: "Noto Sans Devanagari", "Kohinoor Devanagari", "Nirmala UI", "Mangal", Inter, system-ui, sans-serif; }
+
+  .dash-route {
+    position: absolute; top: 46px; left: 24px; font-size: 12px; line-height: 1.55;
+    text-shadow: 0 1px 10px rgba(0,0,0,.7);
+  }
+  .dash-route b { font-weight: 600; letter-spacing: .03em; color: #8fe06a; }
+  .dash-route span { display: block; opacity: .65; }
+
+  .dash-speed {
+    position: absolute; left: 24px; bottom: 8vh; display: flex; align-items: baseline; gap: 7px;
+    text-shadow: 0 2px 14px rgba(0,0,0,.8);
+  }
+  .dash-speed b { font-size: 42px; font-weight: 600; line-height: .9; font-variant-numeric: tabular-nums; }
+  .dash-speed i { font-style: normal; font-size: 12px; opacity: .7; }
+  .dash-status {
+    position: absolute; left: 24px; bottom: calc(8vh - 20px);
+    font-size: 12px; opacity: .6; text-shadow: 0 1px 10px rgba(0,0,0,.7);
+  }
+
+  .dash-horn {
+    position: absolute; right: 24px; bottom: 8vh;
+    width: 58px; height: 58px; display: grid; place-items: center;
+    border: 1px solid rgba(255,255,255,.2); border-radius: 9999px;
+    background: rgba(255,255,255,.10); color: #fff; font-size: 25px; cursor: pointer;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    transition: transform .12s, background .15s, color .15s;
+  }
+  .dash-horn:hover { background: rgba(255,255,255,.18); }
+  .dash-horn:active { transform: scale(.92); }
+  .dash-horn.is-blaring { background: #f6a71f; color: #2a1d05; border-color: #ffd27d; }
+
+  .dash-tape {
+    position: absolute; top: -19px; left: 24px;
+    font-size: 10px; letter-spacing: .16em; opacity: .45; white-space: nowrap;
+  }
+
+  /* ---- 3D highway stage ----
+     The scene now lives in WebGL: <three-d-stage> owns the renderer and
+     lighting, bus.js builds the Sajha bus, highway.js builds the scrolling
+     road. See the module at the end of <body> for the wiring. The old CSS
+     scene it replaced is still in this branch's git history. */
+  three-d-stage {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    /* Set here, not via the element's `background` attribute: that attribute is
+       applied as an inline style during boot and the <x-dc> framework rewrites
+       the style attribute afterwards, so it silently reverted to the default
+       cream. A CSS custom property survives that. */
+    --stage-bg: transparent;
+    /* Takes pointer input so OrbitControls works. Safe because every control —
+       the bar, the horn, the links — comes after this element in the markup and
+       therefore paints and hit-tests above it; only drags on empty scene reach
+       the canvas. */
+  }
+  three-d-stage:not(:defined) { visibility: hidden; }
+
+  /* Sits behind the canvas (the renderer is alpha:true), so the page still
+     reads as a sky if WebGL or the three.js CDN is unavailable. Tuned to meet
+     highway.js's fog colour at the horizon so distance melts into it. */
+  .sky {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      #2b4a7a 0%, #4d6f9e 34%, #7794b5 58%, #8fa2bd 74%, #9fb0c6 100%);
   }
 
   /* ---- small screens ---- */
@@ -150,6 +210,12 @@
 
     /* reference keeps the bar at full size (80px disc, bottom: 8vh) — only the width adapts */
     .np-bar { width: calc(100vw - 24px); }
+
+    /* the bar owns the full width down here, so the dashboard moves above it */
+    .dash-route, .dash-status { display: none; }
+    .dash-speed { left: 16px; bottom: calc(8vh + 108px); }
+    .dash-speed b { font-size: 30px; }
+    .dash-horn { right: 16px; bottom: calc(8vh + 104px); width: 46px; height: 46px; font-size: 20px; }
   }
 
   /* phones in landscape: no room for a fat bar */
@@ -161,9 +227,10 @@
 </style>
 <script src="./player.js"></script>
 </helmet>
-<div style="position: relative; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed;">
-  <img class="hero-blur" src="uploads/hero-plated.jpg" alt="" aria-hidden="true">
-  <img class="hero-img" src="uploads/hero-plated.jpg" alt="Deluxe Yatayat" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 55%; display: block;">
+<div class="stage" style="position: relative; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed; background: #0d1226;">
+  <div class="sky"></div>
+  <three-d-stage name="deluxe_yatayat" background="transparent"></three-d-stage>
+
   <div style="position: absolute; top: 0; left: 0; right: 0; height: 96px; background: linear-gradient(to bottom, rgba(22,24,38,.72) 0%, rgba(22,24,38,.34) 55%, rgba(22,24,38,0) 100%); pointer-events: none;"></div>
 
   <div class="np-clock" style="position: absolute; top: 22px; left: 24px; display: flex; align-items: baseline; font-size: 14px; letter-spacing: .02em; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
@@ -173,8 +240,20 @@
   <div class="np-live" style="position: absolute; top: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
     <span class="np-dot"><span></span><span></span></span>
     <span class="np-online" style="font-weight: 500;">30</span>
-    <span style="opacity: .7;">online</span>
+    <span class="dev" style="opacity: .7;">सवारी</span>
   </div>
+
+  <div class="dash-route dev">
+    <b>रुट १ · पृथ्वी राजमार्ग</b>
+    <span>काठमाडौं → पोखरा · मुग्लिन हुँदै</span>
+  </div>
+
+  <div class="dash-speed">
+    <b class="dash-kmh">0</b><i class="dev">किमी/घण्टा</i>
+  </div>
+  <div class="dash-status dev">बस डिपोमै छ</div>
+
+  <button type="button" class="dash-horn" aria-label="Horn"><i class="ph-fill ph-megaphone-simple"></i></button>
 
   <div class="np-links" style="position: absolute; top: 18px; right: 24px; display: flex; align-items: center; gap: 22px;">
     <a class="np-pill" href="https://open.spotify.com/playlist/4JQBFUNma3NLYxv5gomOgC" target="_blank" rel="noopener noreferrer" aria-label="Open on Spotify" style="display: flex; align-items: center; gap: 8px; font-size: 14px; text-shadow: 0 1px 10px rgba(0,0,0,.6);">
@@ -192,6 +271,7 @@
   <div class="np-yt"><div id="np-yt"></div></div>
 
   <div class="np-bar">
+    <span class="dash-tape dev">कन्डक्टरको टेप</span>
     <div class="np-art">
       <div class="np-disc"><img alt=""></div>
       <span class="np-spindle"></span>
@@ -213,5 +293,175 @@
   </div>
 </div>
 </x-dc>
+
+<!-- Glue between the 3D files and the radio. bus.js, highway.js and three-d-stage.js
+     are used exactly as authored; everything specific to this page lives here. Kept
+     out of <helmet> so support.js cannot clone it into a second execution. -->
+<script type="module">
+  import { buildBus } from './bus.js';
+  import { buildHighway } from './highway.js';
+
+  // The <x-dc> framework re-creates the body after parse, so the <three-d-stage>
+  // present when this module first runs is often discarded and replaced. A one-shot
+  // querySelector therefore wired a stage that was never shown — two renderers
+  // booted and only the orphan had a scene. Wire whichever stage is in the document
+  // now, and again if it is ever swapped out.
+  async function wire(stage) {
+    if (!stage || stage.__wired) return;
+    stage.__wired = true;
+    let THREE;
+    try {
+      ({ THREE } = await stage.ready);
+    } catch (e) {
+      return;                       // three.js failed to load; the stage shows its own message
+    }
+
+    // three-d-stage ships as a model *viewer*: orbit controls, a download toolbar
+    // and a camera auto-framed to the object. None of that suits a fixed driving
+    // shot, so the chrome comes off and the camera is placed by hand. Reaching into
+    // the shadow root and the underscored fields is deliberate — that file's header
+    // warns it is overwritten when the starter is re-copied, so this page adapts it
+    // rather than editing it.
+    for (const sel of ['.toolbar', '.note']) {
+      const n = stage.shadowRoot.querySelector(sel);
+      if (n) n.style.display = 'none';
+    }
+
+    const scene = stage._scene, camera = stage._camera, controls = stage._controls;
+    controls.autoRotate = false;
+    controls.enableDamping = true;
+
+    // Keep the camera in a corridor above the road and behind the bus.
+    //
+    // Panning is the thing that really breaks this: right-drag moves the *target*,
+    // and every other limit is measured from the target, so once it wanders the
+    // camera can end up under the tarmac or buried in a hillside. With pan off the
+    // target stays put at bus height and the angle limits actually mean something.
+    controls.enablePan = false;
+    controls.minPolarAngle = 0.90;              // ~52°, stops it going overhead
+    controls.maxPolarAngle = 1.50;              // ~86°, stops it dropping to road level
+    controls.minAzimuthAngle = -Infinity;       // full 360° — the vertical limit below
+    controls.maxAzimuthAngle = Infinity;        //   is what keeps it out of trouble
+    // The target sits mid-bus (z = -5) and the bus is 11.2 m long, so the orbit
+    // radius has to clear its rear bumper: at 8 m the camera ended up inside the
+    // bodywork. 15 m keeps it behind the bus even at full azimuth swing.
+    controls.minDistance = 15;
+    controls.maxDistance = 26;
+    stage._ground.visible = false;   // the road receives the shadow instead
+
+    const { bus, wheels } = buildBus();
+    bus.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+    // Livery lettering on the white panels, kept here rather than in bus.js so that
+    // model file stays exactly as authored. Positions follow its L=11.2 / W=2.5 box,
+    // so they need revisiting if those dimensions change.
+    const BUS_L = 11.2, BUS_W = 2.5, WORD = 'साझा यातायात';
+    const FONT = '"Noto Sans Devanagari","Kohinoor Devanagari","Nirmala UI",Mangal,sans-serif';
+
+    function decal(text, widthM, heightM) {
+      const cv = document.createElement('canvas');
+      cv.width = 1024; cv.height = 256;
+      const g = cv.getContext('2d');
+      // Shrink to fit rather than trusting one size — Devanagari metrics vary a lot
+      // between the system fonts this falls back to, and overflow would clip.
+      let size = 160;
+      g.font = `700 ${size}px ${FONT}`;
+      while (g.measureText(text).width > 960 && size > 40) {
+        size -= 6;
+        g.font = `700 ${size}px ${FONT}`;
+      }
+      g.fillStyle = '#1c7d12';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(text, 512, 132);
+
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 16;
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(widthM, heightM),
+        new THREE.MeshStandardMaterial({
+          name: 'livery_text', map: tex, transparent: true, roughness: 0.5, metalness: 0.02,
+        })
+      );
+      m.name = 'livery_text';
+      m.castShadow = false;         // a transparent quad casting a solid shadow looks wrong
+      m.receiveShadow = false;
+      return m;
+    }
+
+    // Rear panel: above the plate, inboard of the tail lamps.
+    const rear = decal(WORD, 1.5, 0.34);
+    rear.position.set(0, 1.86, BUS_L / 2 + 0.03);
+    bus.add(rear);
+
+    // Both flanks: on the white band, between the two doors and below the waist trim.
+    for (const s of [-1, 1]) {
+      const side = decal(WORD, 2.6, 0.44);
+      side.position.set(s * (BUS_W / 2 + 0.03), 1.72, -0.6);
+      side.rotation.y = s * Math.PI / 2;
+      bus.add(side);
+    }
+
+    scene.add(bus);
+
+    const advance = buildHighway(scene);
+    scene.traverse((o) => {
+      if (o.isMesh && /road|shoulder|terrace|valley|kerb/.test(o.name)) o.receiveShadow = true;
+    });
+
+    // Over-the-shoulder, aimed so the rear plate is in frame: it sits at y≈1.06,
+    // z≈5.65, and targeting further down the road pitched the camera up until only
+    // the bus roof showed.
+    camera.position.set(0, 3.7, 18);
+    camera.near = 0.1;
+    camera.far = 600;
+    camera.updateProjectionMatrix();
+    controls.target.set(0, 2.4, -5);
+    controls.update();
+
+    // setObject() would normally size the key light's shadow box to the model. We
+    // skip setObject, so without this the 11m bus falls outside the shadow frustum.
+    const key = stage._key;
+    key.shadow.camera.left = -16; key.shadow.camera.right = 16;
+    key.shadow.camera.top = 16;   key.shadow.camera.bottom = -16;
+    key.shadow.camera.updateProjectionMatrix();
+
+    const still = matchMedia('(prefers-reduced-motion: reduce)');
+    const WHEEL_R = 0.55;                       // matches the tyre radius in bus.js
+    let last = 0;
+
+    stage._renderer.setAnimationLoop((t) => {
+      const dt = last ? Math.min((t - last) / 1000, 0.05) : 0;
+      last = t;
+      // player.js publishes the speedometer; km/h -> metres travelled this frame.
+      const kmh = still.matches ? 0 : (window.__kmh || 0);
+      const metres = (kmh / 3.6) * dt;
+      if (metres > 0) {
+        advance(metres);
+        for (const w of wheels) w.rotation.x -= metres / WHEEL_R;
+      }
+      // This loop replaced the stage's own, which is where controls.update()
+      // used to live. Damped OrbitControls need it every frame or the drag has
+      // no inertia and releasing leaves the camera stuck mid-motion.
+      // The vertical limit depends on where you are around the bus. Directly
+      // behind (or ahead) the road is clear, so the camera may sit low for the
+      // over-the-shoulder shot. Swung out to the flanks that same height is
+      // inside the roadside pines, so the ceiling on how low you can go lifts
+      // — the camera rides up over the treeline as you come round. Setting it
+      // before update() lets OrbitControls ease into the new limit.
+      const side = Math.abs(Math.sin(controls.getAzimuthalAngle()));   // 0 = tail/nose, 1 = broadside
+      controls.maxPolarAngle = 1.50 - side * 0.40;                     // 86° behind → 63° broadside
+      controls.update();
+      // Backstop: no future tweak to the limits can ever put the eye under the road.
+      if (camera.position.y < 1) camera.position.y = 1;
+      stage._renderer.render(scene, camera);
+    });
+  }
+
+  const scan = () => wire(document.querySelector('three-d-stage'));
+  scan();
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+</script>
 </body>
 </html>
