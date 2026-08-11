@@ -213,9 +213,11 @@
 
     /* the bar owns the full width down here, so the dashboard moves above it */
     .dash-route, .dash-status { display: none; }
-    .dash-speed { left: 16px; bottom: calc(8vh + 108px); }
+    .dash-speed { left: 16px; bottom: calc(8vh + 122px); }
     .dash-speed b { font-size: 30px; }
-    .dash-horn { right: 16px; bottom: calc(8vh + 104px); width: 46px; height: 46px; font-size: 20px; }
+    /* +118 not +104: at 46px tall the horn's lower edge crossed the bar's top
+       corner on narrow viewports. */
+    .dash-horn { right: 16px; bottom: calc(8vh + 118px); width: 46px; height: 46px; font-size: 20px; }
   }
 
   /* phones in landscape: no room for a fat bar */
