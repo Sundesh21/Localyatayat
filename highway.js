@@ -31,55 +31,29 @@ const cone = (name, r, h, m, x, y, z, seg = 5) => {
 
 const TILE = 24, TILES = 11, ROAD_Y = -0.04;
 
-const DEV_FONT = '"Noto Sans Devanagari","Kohinoor Devanagari","Nirmala UI",Mangal,sans-serif';
-
-// Which tile carries which board: [name, Devanagari line, Latin line]
+// Which tile carries which board: [object name, pre-rendered face]
+//
+// The faces are baked PNGs rather than text drawn onto a canvas at runtime. Doing
+// it live meant the layout depended on which Devanagari face the device resolved
+// and what measureText reported for it, and on phones both lines spilled outside
+// the board. Every device now samples identical pixels.
+//
+// Regenerate by rendering the two lines at 2048x896 on the yellow board in Noto
+// Sans Devanagari and saving over the files in assets/.
 const SIGNS = {
-  4: ['sign_mugling', 'मुग्लिन ८० कि.मि.', 'MUGLIN  80 km'],
-  0: ['sign_pokhara', 'पोखरा १५० कि.मि.', 'POKHARA  150 km'],
+  4: ['sign_mugling', './assets/sign-mugling.png'],
+  0: ['sign_pokhara', './assets/sign-pokhara.png'],
 };
 
-/** Pick the largest font size that still fits `max` px wide. Devanagari metrics
- *  vary a lot across the system fonts this falls back to, so a fixed size clips
- *  on some machines. */
-function fitFont(g, text, start, max, family) {
-  let size = start;
-  g.font = `700 ${size}px ${family}`;
-  while (g.measureText(text).width > max && size > 24) {
-    size -= 4;
-    g.font = `700 ${size}px ${family}`;
-  }
-}
+const signTex = new THREE.TextureLoader();
 
-/** Distance board: black on yellow, two posts, facing oncoming traffic (+Z). */
-function signboard(name, devLine, latinLine) {
-  // 2048x896, double the old size — these are read at a glance as they rush past,
-  // and the smaller texture went soft. Laid out as fractions of W/H so the numbers
-  // stay in step with the canvas.
-  const W = 2048, H = 896, FIT = W * 0.84;
-  const cv = document.createElement('canvas');
-  cv.width = W; cv.height = H;
-  const g = cv.getContext('2d');
-  g.fillStyle = '#f0c02f';
-  g.fillRect(0, 0, W, H);
-  g.strokeStyle = '#15150f';
-  g.lineWidth = W * 0.0156;
-  g.strokeRect(W * 0.023, H * 0.054, W * 0.954, H * 0.893);
-  g.fillStyle = '#15150f';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  // fitFont only knows what measureText reports for the font resolved right now,
-  // and devices resolve different Devanagari faces. The maxWidth argument is what
-  // actually guarantees the line cannot overrun the canvas and get clipped.
-  fitFont(g, devLine, H * 0.335, FIT, DEV_FONT);
-  g.fillText(devLine, W / 2, H * 0.368, FIT);
-  fitFont(g, latinLine, H * 0.272, FIT, 'Arial, Helvetica, sans-serif');
-  g.fillText(latinLine, W / 2, H * 0.683, FIT);
-
-  const tex = new THREE.CanvasTexture(cv);
+/** Distance board: pre-rendered face on two posts, facing oncoming traffic (+Z). */
+function signboard(name, pngPath) {
+  const tex = signTex.load(pngPath);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 16;
-  const face = new THREE.MeshStandardMaterial({ name: 'sign_face', map: tex, roughness: 0.6, metalness: 0.05 });
+  const face = mat('sign_face', '#ffffff', { roughness: 0.6, metalness: 0.05 });
+  face.map = tex;
   const edge = mat('sign_edge', '#c8a029', { roughness: 0.6 });
 
   const s = new THREE.Group();
