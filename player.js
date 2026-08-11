@@ -335,11 +335,35 @@
     presence();
     dash();
     setInterval(dash, 90);
-    if (el.horn) el.horn.onclick = function () {
-      horn();
-      el.horn.classList.add('is-blaring');
-      setTimeout(function () { el.horn.classList.remove('is-blaring'); }, 620);
-    };
+
+    // Add ?debug=1 to the URL to get an on-screen readout of what a tap actually
+    // hits and whether the player is alive. Exists because these symptoms only
+    // appear on real phones, where there is no console to read.
+    if (/[?&]debug=1/.test(location.search)) {
+      var dbg = document.createElement('div');
+      dbg.setAttribute('style',
+        'position:fixed;left:8px;right:8px;top:8px;z-index:99;padding:8px 10px;' +
+        'font:12px/1.45 ui-monospace,Menlo,monospace;color:#0f0;background:rgba(0,0,0,.82);' +
+        'border:1px solid #0f0;border-radius:6px;white-space:pre-wrap;pointer-events:none');
+      document.body.appendChild(dbg);
+      var taps = 0;
+      var say = function (extra) {
+        dbg.textContent =
+          'taps=' + taps + '  yt=' + (!!yt) + '  playing=' + playing + '  kicked=' + kicked +
+          '\ntracks=' + IDS.length + '  kmh=' + Math.round(kmh.at) +
+          '\ncover=' + (el.cover && el.cover.currentSrc ? 'loaded' : 'EMPTY') +
+          '\n' + (extra || '');
+      };
+      document.addEventListener('pointerdown', function (e) {
+        taps++;
+        var el2 = document.elementFromPoint(e.clientX, e.clientY);
+        var btn = e.target.closest && e.target.closest('.np-play,.np-prev,.np-next,.dash-horn');
+        say('hit=' + (el2 ? (el2.className || el2.tagName) : '?') +
+            '\nbutton=' + (btn ? btn.className : 'NONE'));
+      }, true);
+      setInterval(say, 500);
+      say('tap a button');
+    }
 
     // YouTube embeds need a real http(s) origin. Opened straight off disk the
     // player gets no referrer, every video fails with error 153, and the bar just
@@ -355,23 +379,38 @@
     // Pause exists because a page that plays audio with no way to silence it is
     // hostile (and fails WCAG 1.4.2). Skip forward/back just walks the shuffled
     // order — still nobody picks a specific song.
-    el.play.onclick = function () {
+    function toggle() {
       if (!yt) return;
       if (playing) { muted = true; yt.pauseVideo(); }
       else { muted = false; kicked = true; yt.playVideo(); }
-    };
+    }
 
     // loadVideoById autoplays, so a skip counts as the ignition gesture too.
     function skip(n) {
-      return function () {
-        if (!yt) return;
-        muted = false;
-        kicked = true;
-        go(idx + n);
-      };
+      if (!yt) return;
+      muted = false;
+      kicked = true;
+      go(idx + n);
     }
-    el.prev.onclick = skip(-1);
-    el.next.onclick = skip(1);
+
+    // Delegated from the document rather than bound to each button. support.js
+    // re-creates this page's DOM after parse — that is what left an orphaned
+    // <three-d-stage> earlier — and a handler bound straight to a node dies with
+    // it, leaving buttons that look fine and do nothing. Delegation survives any
+    // number of rebuilds, and closest() means a tap landing on the inner <i>
+    // icon still counts.
+    document.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest && e.target.closest('.np-play, .np-prev, .np-next, .dash-horn');
+      if (!t) return;
+      if (t.classList.contains('np-play')) return toggle();
+      if (t.classList.contains('np-prev')) return skip(-1);
+      if (t.classList.contains('np-next')) return skip(1);
+      if (t.classList.contains('dash-horn')) {
+        horn();
+        t.classList.add('is-blaring');
+        setTimeout(function () { t.classList.remove('is-blaring'); }, 620);
+      }
+    });
 
     // Browsers refuse to start audio without a gesture, so the first touch anywhere
     // on the page is the ignition. Once it's running these come off.
