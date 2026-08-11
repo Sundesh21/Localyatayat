@@ -7,8 +7,7 @@ function split(raw, author) {
 }
 
 function keep(list) {
-  var out = list.filter(function (id) { return !BAD[id]; });
-  return out.length ? out : list;      // never end up with an empty player
+  return list.filter(function (id) { return !BAD[id]; });
 }
 const assert = require('assert');
 const eq = (raw, author, t, a) => {
@@ -31,7 +30,28 @@ assert.deepStrictEqual(keep(['a','b','c']), ['a','b','c']);      // nothing bloc
 BAD = {b:1};
 assert.deepStrictEqual(keep(['a','b','c']), ['a','c']);          // drops the bad one
 BAD = {a:1,b:1,c:1};
-assert.deepStrictEqual(keep(['a','b','c']), ['a','b','c']);      // all bad -> fall back, never empty
+// all bad -> empty, NOT the original list. Handing the unfiltered list back is
+// what let known-dead videos (the error-150 ones) return to the player.
+assert.deepStrictEqual(keep(['a','b','c']), []);
+BAD = {};
+
+// --- videos.list filtering: only public + embeddable ids survive, in order ---
+function playable(ids, items) {
+  const ok = {}, present = {};
+  items.forEach(v => {
+    present[v.id] = 1;
+    if (v.status.privacyStatus === 'private' || !v.status.embeddable) return;
+    ok[v.id] = 1;
+  });
+  return { keep: ids.filter(id => ok[id]), missing: ids.filter(id => !present[id]) };
+}
+const r = playable(['a','b','c','d'], [
+  { id: 'a', status: { embeddable: true,  privacyStatus: 'public'  } },
+  { id: 'b', status: { embeddable: false, privacyStatus: 'public'  } },   // embedding off
+  { id: 'c', status: { embeddable: true,  privacyStatus: 'private' } },   // private
+]);                                                                        // d: deleted, absent
+assert.deepStrictEqual(r.keep, ['a'], 'only confirmed embeddable public videos may play');
+assert.deepStrictEqual(r.missing, ['d'], 'ids missing from the response are deleted');
 
 // --- which YouTube errors are the song's fault ---
 const perm = d => (d === 100 || d === 101 || d === 150);
@@ -57,5 +77,12 @@ for (let n = 0; n < 200; n++) {
 // and it must actually reorder (45! makes a false failure vanishingly unlikely)
 assert.ok(Array.from({length:20}, () => shuffle(src.slice()).join()).some(o => o !== src.join()),
           'shuffle never changed the order');
+
+// --- skip buttons: index wraps both ways, so prev at the top goes to the end ---
+const wrap = (n, len) => (n + len) % len;
+assert.strictEqual(wrap(0 - 1, 45), 44, 'prev at the first track must wrap to the last');
+assert.strictEqual(wrap(44 + 1, 45), 0, 'next at the last track must wrap to the first');
+assert.strictEqual(wrap(3 + 1, 45), 4);
+assert.strictEqual(wrap(3 - 1, 45), 2);
 
 console.log('all checks passed');

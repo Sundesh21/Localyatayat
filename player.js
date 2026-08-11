@@ -1,4 +1,12 @@
 (function () {
+  // support.js re-creates <helmet> scripts inside <head>, so this file runs twice:
+  // once from the tag in the body, once from the clone. That left two players
+  // fighting over #np-yt with separate shuffles, watchdogs and error handlers —
+  // tracks jumping, doubled blocklisting, and a play button wired to whichever
+  // copy had no player. Whoever gets here first wins.
+  if (window.__npLoaded) return;
+  window.__npLoaded = true;
+
   // "Local Bus Songs". With an API key the track list is read from YouTube at load,
   // so songs you add there show up here. Without one it falls back to SEED below.
   //
@@ -9,6 +17,15 @@
   // page costs ~2 per load.
   var PLAYLIST = 'PLLxpFTKZn2m4';
   var API_KEY  = 'AIzaSyC5PC5mpu-cSvdSS0picxAAcOq2BNpZidk';
+
+  // Where the Data API calls go. Empty = straight to googleapis with the key
+  // above. To move the key server-side on Vercel later, add an /api/youtube
+  // function that forwards `path` + the remaining query string to
+  // googleapis.com/youtube/v3 with process.env.YT_API_KEY, then set:
+  //   var API_PROXY = '/api/youtube';
+  // and blank out API_KEY. Nothing else in this file changes — every request
+  // already goes through get() below.
+  var API_PROXY = '';
 
   // Fallback list, scraped 2026-08-10. Only used when API_KEY is empty or the API
   // call fails, so the bar still works — but it goes stale as you add songs.
@@ -98,12 +115,11 @@
     if (yt) yt.loadVideoById(IDS[idx]);
   }
 
-  // Read the playlist via the Data API: page through the items, then ask videos.list
-  // for titles and — the part that matters here — status.embeddable, so tracks that
-  // would fail mid-playback are dropped up front instead of being skipped noisily.
+  // Drop everything the blocklist knows about. This used to hand the *unfiltered*
+  // list back when every id was blocked, which quietly put known-dead videos into
+  // the player again; callers deal with an empty result instead (see boot()).
   function keep(list) {
-    var out = list.filter(function (id) { return !BAD[id]; });
-    return out.length ? out : list;      // never end up with an empty player
+    return list.filter(function (id) { return !BAD[id]; });
   }
 
   // Fisher-Yates, in place. Shuffled once per visit so two people opening the page
@@ -117,39 +133,92 @@
     return a;
   }
 
+  // One door for every Data API call, so the key lives in exactly one place and
+  // can move behind API_PROXY later. Rejects with a message that names the HTTP
+  // status — the old version threw a bare 0 and the failure was invisible.
+  function get(path, params) {
+    var url = API_PROXY
+      ? API_PROXY + '?path=' + encodeURIComponent(path) + '&' + params
+      : 'https://www.googleapis.com/youtube/v3/' + path + '?key=' + API_KEY + '&' + params;
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error(path + ' -> HTTP ' + r.status + ' ' + (r.statusText || ''));
+      return r.json();
+    });
+  }
+
+  // Ask videos.list which of these ids can actually be embedded, and keep only
+  // those. Anything the API says has embedding disabled goes on the blocklist
+  // right here: that is the same verdict as a YouTube 101/150 at playback time,
+  // so recording it now keeps it out of the SEED fallback too. videos.list takes
+  // at most 50 ids per call, and it silently omits ids that no longer exist.
+  function verify(ids) {
+    var chunks = [], i;
+    for (i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+    return Promise.all(chunks.map(function (c) {
+      return get('videos', 'part=snippet,status&id=' + c.join(','));
+    })).then(function (rs) {
+      var ok = {}, seenById = {}, dropped = [];
+      rs.forEach(function (r) {
+        (r.items || []).forEach(function (v) {
+          seenById[v.id] = 1;
+          if (v.status.privacyStatus === 'private') { dropped.push(v.id + ' (private)'); return; }
+          if (!v.status.embeddable) {
+            dropped.push(v.id + ' (embedding disabled)');
+            blocklist(v.id);
+            return;
+          }
+          ok[v.id] = true;
+          seen[v.id] = split(v.snippet.title, v.snippet.channelTitle);
+        });
+      });
+      ids.forEach(function (id) {
+        if (!seenById[id]) { dropped.push(id + ' (deleted/unavailable)'); blocklist(id); }
+      });
+      if (dropped.length) console.warn('[player] filtered out ' + dropped.length + ' unplayable:', dropped.join(', '));
+      return ids.filter(function (id) { return ok[id]; });     // keeps playlist order
+    });
+  }
+
+  // Read the playlist via the Data API: page through the items, then confirm each
+  // one is embeddable before it can reach the player. If any of that fails we fall
+  // back to SEED *minus the blocklist* — never the raw array, which is what kept
+  // re-feeding known-dead videos like the 150 in the console.
   function loadList(done) {
-    if (!API_KEY) { IDS = keep(SEED); return done(); }
+    var finished = false;
+    function finish() { if (!finished) { finished = true; done(); } }
+
+    function fallback(why) {
+      IDS = keep(SEED);
+      console.warn('[player] ' + why + ' — using the seed list: ' + IDS.length +
+                   ' of ' + SEED.length + ' tracks (' + (SEED.length - IDS.length) + ' blocklisted)');
+      finish();
+    }
+
+    if (!API_KEY && !API_PROXY) return fallback('no Data API key configured');
+
     var ids = [];
-    var get = function (path, params) {
-      return fetch('https://www.googleapis.com/youtube/v3/' + path + '?key=' + API_KEY + '&' + params)
-        .then(function (r) { if (!r.ok) throw 0; return r.json(); });
-    };
     (function page(token) {
       get('playlistItems', 'part=contentDetails&maxResults=50&playlistId=' + PLAYLIST +
                            (token ? '&pageToken=' + token : ''))
         .then(function (j) {
           (j.items || []).forEach(function (it) { ids.push(it.contentDetails.videoId); });
           if (j.nextPageToken) return page(j.nextPageToken);
-          // videos.list takes at most 50 ids per call.
-          var chunks = [], i;
-          for (i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
-          return Promise.all(chunks.map(function (c) {
-            return get('videos', 'part=snippet,status&id=' + c.join(','));
-          })).then(function (rs) {
-            var ok = {};
-            rs.forEach(function (r) {
-              (r.items || []).forEach(function (v) {
-                if (!v.status.embeddable || v.status.privacyStatus === 'private') return;
-                ok[v.id] = true;
-                seen[v.id] = split(v.snippet.title, v.snippet.channelTitle);
-              });
-            });
-            IDS = keep(ids.filter(function (id) { return ok[id]; }));   // keep playlist order
-            if (!IDS.length) IDS = keep(SEED);
-            done();
+
+          console.log('[player] playlist ' + PLAYLIST + ': ' + ids.length + ' videos');
+          var fresh = keep(ids);
+          if (fresh.length < ids.length) {
+            console.log('[player] ' + (ids.length - fresh.length) + ' already blocklisted, not re-checking');
+          }
+          if (!fresh.length) return fallback('every playlist video is blocklisted');
+
+          return verify(fresh).then(function (playable) {
+            console.log('[player] ' + playable.length + ' of ' + ids.length + ' confirmed embeddable');
+            if (!playable.length) return fallback('API confirmed no embeddable videos');
+            IDS = playable;
+            finish();
           });
         })
-        .catch(function () { IDS = SEED.slice(); done(); });
+        .catch(function (e) { fallback('Data API failed (' + (e && e.message || e) + ')'); });
     })('');
   }
 
@@ -210,6 +279,7 @@
     el = { bar: bar, cover: q('.np-disc img'), title: q('.np-title'), artist: q('.np-artist'),
            seek: q('.np-seek'), fill: q('.np-fill'), knob: q('.np-knob'), time: q('.np-time'),
            play: q('.np-play'), icon: q('.np-play i'),
+           prev: q('.np-prev'), next: q('.np-next'),
            h: d('.np-h'), m: d('.np-m'), ap: d('.np-ap'), online: d('.np-online') };
 
     clock();
@@ -227,14 +297,26 @@
       return;
     }
 
-    // The only control anyone gets. It exists because a page that plays audio with
-    // no way to silence it is hostile (and fails WCAG 1.4.2) — not so visitors can
-    // pick songs. Nothing here chooses a track.
+    // Pause exists because a page that plays audio with no way to silence it is
+    // hostile (and fails WCAG 1.4.2). Skip forward/back just walks the shuffled
+    // order — still nobody picks a specific song.
     el.play.onclick = function () {
       if (!yt) return;
       if (playing) { muted = true; yt.pauseVideo(); }
       else { muted = false; kicked = true; yt.playVideo(); }
     };
+
+    // loadVideoById autoplays, so a skip counts as the ignition gesture too.
+    function skip(n) {
+      return function () {
+        if (!yt) return;
+        muted = false;
+        kicked = true;
+        go(idx + n);
+      };
+    }
+    el.prev.onclick = skip(-1);
+    el.next.onclick = skip(1);
 
     // Browsers refuse to start audio without a gesture, so the first touch anywhere
     // on the page is the ignition. Once it's running these come off.
@@ -264,6 +346,15 @@
     var apiUp = false, listUp = false;
     function boot() {
       if (!apiUp || !listUp || yt) return;
+      // Nothing survived the filters. Building a player on an empty list would
+      // load videoId `undefined` and error-loop, so say so and stop instead.
+      if (!IDS.length) {
+        console.error('[player] no playable tracks. If this looks wrong, clear the blocklist: ' +
+                      "localStorage.removeItem('" + KEY + "')");
+        el.title.textContent = 'No playable tracks';
+        el.artist.textContent = 'Every song in the list is blocked or unembeddable';
+        return;
+      }
       shuffle(IDS);
       paint();
       yt = new YT.Player('np-yt', {
