@@ -57,7 +57,29 @@
     } catch (e) {}
   }
 
-  var el = {}, yt = null, playing = false, curId = null;
+  var yt = null, playing = false, curId = null;
+
+  // support.js re-creates this page's DOM after parse — the same behaviour that
+  // earlier left an orphaned <three-d-stage> running its own renderer. Every node
+  // captured at boot is detached by that rebuild, and writing to a detached node
+  // does nothing visible: buttons that never respond, a speedometer stuck at 0,
+  // artwork that never appears. So resolve lazily, and re-resolve whenever the
+  // cached bar has left the document.
+  var _el = null, EMPTY = {};
+  function E() {
+    if (_el && _el.bar && _el.bar.isConnected) return _el;
+    var bar = document.querySelector('.np-bar');
+    if (!bar) return EMPTY;
+    var q = function (s) { return bar.querySelector(s); };
+    var d = function (s) { return document.querySelector(s); };
+    _el = { bar: bar, cover: q('.np-disc img'), title: q('.np-title'), artist: q('.np-artist'),
+            seek: q('.np-seek'), fill: q('.np-fill'), knob: q('.np-knob'), time: q('.np-time'),
+            play: q('.np-play'), icon: q('.np-play i'),
+            prev: q('.np-prev'), next: q('.np-next'),
+            h: d('.np-h'), m: d('.np-m'), ap: d('.np-ap'), online: d('.np-online'),
+            kmh: d('.dash-kmh'), status: d('.dash-status'), horn: d('.dash-horn') };
+    return _el;
+  }
   var IDS = [], idx = 0, misses = 0, everPlayed = false;
   // `muted` = visitor pressed pause; `kicked` = someone has interacted, so audio is
   // allowed to start and the stall watchdog is armed.
@@ -83,10 +105,10 @@
   // empty and gets filled lazily from oEmbed (CORS-open, no key needed).
   var seen = {};
   function show(id, m) {
-    el.cover.src = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
-    el.cover.alt = m.title + ' artwork';
-    el.title.textContent = m.title;
-    el.artist.textContent = m.artist;
+    E().cover.src = 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+    E().cover.alt = m.title + ' artwork';
+    E().title.textContent = m.title;
+    E().artist.textContent = m.artist;
   }
 
   function paint() {
@@ -224,9 +246,9 @@
 
   function clock() {
     var d = new Date(), h = d.getHours();
-    el.h.textContent = (h % 12) || 12;
-    el.m.textContent = String(d.getMinutes()).padStart(2, '0');
-    el.ap.textContent = h < 12 ? 'am' : 'pm';
+    E().h.textContent = (h % 12) || 12;
+    E().m.textContent = String(d.getMinutes()).padStart(2, '0');
+    E().ap.textContent = h < 12 ? 'am' : 'pm';
   }
 
   // Decorative, exactly like saloon.wtf's: a random walk that drifts toward ~36.
@@ -237,7 +259,7 @@
       setTimeout(function () {
         var up = Math.random() < (n < 36 ? .58 : .42) ? 1 : -1;
         n = Math.max(14, Math.min(58, n + up * (1 + Math.floor(Math.random() * 3))));
-        el.online.textContent = n;
+        E().online.textContent = n;
         step();
       }, 2500 + Math.random() * 3500);
     })();
@@ -245,9 +267,9 @@
 
   function setPlaying(on) {
     playing = on;
-    el.bar.classList.toggle('is-playing', on);
-    el.icon.className = on ? 'ph-fill ph-pause' : 'ph-fill ph-play';
-    el.play.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    E().bar.classList.toggle('is-playing', on);
+    E().icon.className = on ? 'ph-fill ph-pause' : 'ph-fill ph-play';
+    E().play.setAttribute('aria-label', on ? 'Pause' : 'Play');
     kmh.want = on ? CRUISE : 0;      // the bus pulls away / rolls to a stop with the music
   }
 
@@ -262,8 +284,8 @@
     var d = kmh.want - kmh.at;
     kmh.at = Math.abs(d) < 0.4 ? kmh.want : kmh.at + d * 0.05;
     var v = Math.round(kmh.at);
-    if (el.kmh) el.kmh.textContent = v;
-    if (el.status) el.status.textContent = STATUS[v < 1 ? 0 : v < 32 ? 1 : 2];
+    if (E().kmh) E().kmh.textContent = v;
+    if (E().status) E().status.textContent = STATUS[v < 1 ? 0 : v < 32 ? 1 : 2];
     // The 3D stage reads this every frame to scroll the highway and spin the
     // wheels, so the scene rolls to a stop with the speedometer rather than
     // freezing. Publishing a number beats reaching into this closure.
@@ -301,9 +323,9 @@
     if (!yt || !yt.getDuration) return;
     var d = yt.getDuration() || 0, c = yt.getCurrentTime() || 0;
     var pct = d ? (c / d) * 100 : 0;
-    el.fill.style.width = pct + '%';
-    el.seek.setAttribute('aria-valuenow', Math.round(pct));
-    el.time.textContent = fmt(c) + ' / ' + fmt(d);
+    E().fill.style.width = pct + '%';
+    E().seek.setAttribute('aria-valuenow', Math.round(pct));
+    E().time.textContent = fmt(c) + ' / ' + fmt(d);
 
     // It has to keep playing. If the clock hasn't moved for 15s once someone has
     // interacted — dead stream, silent stall, a track that never starts — give up
@@ -322,13 +344,6 @@
     var bar = document.querySelector('.np-bar');
     if (!bar || !document.getElementById('np-yt')) return setTimeout(ready, 50);
 
-    var q = function (s) { return bar.querySelector(s); }, d = function (s) { return document.querySelector(s); };
-    el = { bar: bar, cover: q('.np-disc img'), title: q('.np-title'), artist: q('.np-artist'),
-           seek: q('.np-seek'), fill: q('.np-fill'), knob: q('.np-knob'), time: q('.np-time'),
-           play: q('.np-play'), icon: q('.np-play i'),
-           prev: q('.np-prev'), next: q('.np-next'),
-           h: d('.np-h'), m: d('.np-m'), ap: d('.np-ap'), online: d('.np-online'),
-           kmh: d('.dash-kmh'), status: d('.dash-status'), horn: d('.dash-horn') };
 
     clock();
     setInterval(clock, 1000);
@@ -351,7 +366,7 @@
         dbg.textContent =
           'taps=' + taps + '  yt=' + (!!yt) + '  playing=' + playing + '  kicked=' + kicked +
           '\ntracks=' + IDS.length + '  kmh=' + Math.round(kmh.at) +
-          '\ncover=' + (el.cover && el.cover.currentSrc ? 'loaded' : 'EMPTY') +
+          '\ncover=' + (E().cover && E().cover.currentSrc ? 'loaded' : 'EMPTY') +
           '\n' + (extra || '');
       };
       document.addEventListener('pointerdown', function (e) {
@@ -370,9 +385,9 @@
     // races through the playlist. Nothing to fix in code — the page has to be
     // served. `cd` to this folder and run: python3 -m http.server 8000
     if (location.protocol === 'file:') {
-      el.title.textContent = 'Serve this page over http://';
-      el.artist.textContent = 'YouTube will not play from file://';
-      el.time.textContent = 'python3 -m http.server 8000';
+      E().title.textContent = 'Serve this page over http://';
+      E().artist.textContent = 'YouTube will not play from file://';
+      E().time.textContent = 'python3 -m http.server 8000';
       return;
     }
 
@@ -445,8 +460,8 @@
       if (!IDS.length) {
         console.error('[player] no playable tracks. If this looks wrong, clear the blocklist: ' +
                       "localStorage.removeItem('" + KEY + "')");
-        el.title.textContent = 'No playable tracks';
-        el.artist.textContent = 'Every song in the list is blocked or unembeddable';
+        E().title.textContent = 'No playable tracks';
+        E().artist.textContent = 'Every song in the list is blocked or unembeddable';
         return;
       }
       shuffle(IDS);

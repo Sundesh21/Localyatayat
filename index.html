@@ -232,7 +232,13 @@
      desktop — but a mobile browser that promotes the WebGL canvas to its own
      compositing layer can float it over controls that merely come later in the
      markup. Pinning the stage to 0 and every control to 2 removes the question. */
-  three-d-stage { z-index: 0; }
+  /* The canvas never takes pointer input. On a phone it was composited above the
+     controls no matter what z-index said, so taps meant to hit play landed on
+     THREE-D-STAGE instead. Orbit gestures come from .gesture below it instead —
+     a plain div, so it obeys ordinary stacking, and being a sibling of the
+     controls rather than an ancestor means a tap on a button never reaches it. */
+  three-d-stage { z-index: 0; pointer-events: none; }
+  .gesture { position: absolute; inset: 0; z-index: 1; touch-action: none; }
   .np-bar, .np-clock, .np-live, .np-links,
   .dash-route, .dash-speed, .dash-status, .dash-horn { z-index: 2; }
   /* Skip the double-tap-zoom wait so taps register immediately, and stop a drag
@@ -293,6 +299,7 @@
 <div class="stage" style="position: relative; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #e9e9ed; background: #0d1226;">
   <div class="sky"></div>
   <three-d-stage name="deluxe_yatayat" background="transparent"></three-d-stage>
+  <div class="gesture"></div>
 
   <div style="position: absolute; top: 0; left: 0; right: 0; height: 96px; background: linear-gradient(to bottom, rgba(22,24,38,.72) 0%, rgba(22,24,38,.34) 55%, rgba(22,24,38,0) 100%); pointer-events: none;"></div>
 
@@ -363,6 +370,7 @@
 <script type="module">
   import { buildBus } from './bus.js';
   import { buildHighway } from './highway.js';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
   // The <x-dc> framework re-creates the body after parse, so the <three-d-stage>
   // present when this module first runs is often discarded and replaced. A one-shot
@@ -390,7 +398,16 @@
       if (n) n.style.display = 'none';
     }
 
-    const scene = stage._scene, camera = stage._camera, controls = stage._controls;
+    const scene = stage._scene, camera = stage._camera;
+
+    // The stage builds its OrbitControls on the renderer canvas. That canvas is
+    // now pointer-events:none, so those controls would never fire — swap them for
+    // a set bound to the .gesture layer, which sits below the UI and above the
+    // scene. Dispose the originals so two instances aren't both listening.
+    stage._controls.dispose();
+    const gesture = document.querySelector('.gesture');
+    const controls = new OrbitControls(camera, gesture);
+    stage._controls = controls;      // keep the stage's own references consistent
     controls.autoRotate = false;
     controls.enableDamping = true;
 
