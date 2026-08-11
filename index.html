@@ -84,6 +84,22 @@
 <link rel="stylesheet" href="./vendor/phosphor-icons-2.1.1/regular/style.css">
 <link rel="stylesheet" href="./vendor/phosphor-icons-2.1.1/fill/style.css">
 <style>
+  /* Vendored so every device draws identical Devanagari. Letting each phone pick
+     its own face is what made the bus lettering clip differently everywhere — the
+     canvas fit loop measures one font and the device draws another. One variable
+     woff2 covers every weight used. unicode-range keeps it to the Devanagari
+     block, so Latin still falls through to Inter/system in the stacks below.
+     Noto is OFL — licence at vendor/noto-sans-devanagari/OFL.txt. */
+  @font-face {
+    font-family: "Noto Sans Devanagari";
+    src: url("./vendor/noto-sans-devanagari/NotoSansDevanagari-variable.woff2") format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0900-097F, U+1CD0-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0,
+                   U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B09;
+  }
+
   html, body { margin: 0; padding: 0; background: #161826; }
   a { color: #e9e9ed; text-decoration: none; }
   a:hover { color: #ffffff; }
@@ -397,8 +413,15 @@
     stage._ground.visible = false;   // the road receives the shadow instead
 
     // Both the bus livery and the highway signboards bake text into canvas
-    // textures, so wait for fonts before any of that is measured or drawn.
-    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    // textures, and canvas text does NOT trigger a webfont download the way
+    // rendered HTML does. document.fonts.ready alone would resolve without ever
+    // fetching the face, and the first textures would bake in a fallback — the
+    // exact device-dependent rendering the vendored font exists to stop. So ask
+    // for it explicitly, then wait.
+    if (document.fonts) {
+      try { await document.fonts.load('700 320px "Noto Sans Devanagari"'); } catch (e) {}
+      await document.fonts.ready;
+    }
 
     const { bus, wheels } = buildBus();
     bus.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
