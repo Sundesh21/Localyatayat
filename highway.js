@@ -64,10 +64,13 @@ function signboard(name, devLine, latinLine) {
   g.fillStyle = '#15150f';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
+  // fitFont only knows what measureText reports for the font resolved right now,
+  // and devices resolve different Devanagari faces. The maxWidth argument is what
+  // actually guarantees the line cannot overrun the canvas and get clipped.
   fitFont(g, devLine, 150, 860, DEV_FONT);
-  g.fillText(devLine, 512, 165);
+  g.fillText(devLine, 512, 165, 860);
   fitFont(g, latinLine, 122, 860, 'Arial, Helvetica, sans-serif');
-  g.fillText(latinLine, 512, 306);
+  g.fillText(latinLine, 512, 306, 860);
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;

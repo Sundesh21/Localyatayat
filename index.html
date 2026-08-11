@@ -384,6 +384,10 @@
     controls.maxDistance = 26;
     stage._ground.visible = false;   // the road receives the shadow instead
 
+    // Both the bus livery and the highway signboards bake text into canvas
+    // textures, so wait for fonts before any of that is measured or drawn.
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+
     const { bus, wheels } = buildBus();
     bus.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
@@ -408,7 +412,13 @@
       g.fillStyle = '#1c7d12';
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(text, 512, 132);
+      // The maxWidth argument is the part that matters. The shrink loop above only
+      // knows what measureText reports for the font resolved right now, and phones
+      // resolve a different Devanagari face than this desktop — so the loop decided
+      // the text fitted, fillText then drew wider glyphs, and the canvas clipped
+      // them ("साझा यातायात" came out as "साझा या"). maxWidth makes the browser
+      // condense to fit whatever font it actually ends up using.
+      g.fillText(text, 512, 132, 960);
 
       const tex = new THREE.CanvasTexture(cv);
       tex.colorSpace = THREE.SRGBColorSpace;
