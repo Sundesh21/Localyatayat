@@ -211,6 +211,18 @@
      lighting, bus.js builds the Sajha bus, highway.js builds the scrolling
      road. See the module at the end of <body> for the wiring. The old CSS
      scene it replaced is still in this branch's git history. */
+  /* Layering is explicit rather than relying on DOM order. The canvas takes
+     pointer input for OrbitControls, and source order alone was enough on
+     desktop — but a mobile browser that promotes the WebGL canvas to its own
+     compositing layer can float it over controls that merely come later in the
+     markup. Pinning the stage to 0 and every control to 2 removes the question. */
+  three-d-stage { z-index: 0; }
+  .np-bar, .np-clock, .np-live, .np-links,
+  .dash-route, .dash-speed, .dash-status, .dash-horn { z-index: 2; }
+  /* Skip the double-tap-zoom wait so taps register immediately, and stop a drag
+     that starts on a control from being stolen as a scroll/orbit gesture. */
+  .np-btn, .np-play, .dash-horn, .np-pill { touch-action: manipulation; }
+
   three-d-stage {
     position: absolute; inset: 0; width: 100%; height: 100%;
     /* Set here, not via the element's `background` attribute: that attribute is
