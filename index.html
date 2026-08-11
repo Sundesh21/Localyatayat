@@ -59,8 +59,12 @@
 <link rel="stylesheet" href="_ds/nocturne-8b7f28e1-6cd6-4c0d-a0b0-9e23a469c7d6/styles.css">
 <script src="_ds/nocturne-8b7f28e1-6cd6-4c0d-a0b0-9e23a469c7d6/_ds_bundle.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
-<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<!-- Vendored: these supply the play/pause/prev/next and horn glyphs, so losing the
+     CDN would leave the transport controls as blank boxes. Only the woff2 is kept
+     — the woff/ttf/svg fallbacks add 7.4MB for browsers far older than the import
+     maps, :has() and WebGL this page already needs. MIT licence alongside. -->
+<link rel="stylesheet" href="./vendor/phosphor-icons-2.1.1/regular/style.css">
+<link rel="stylesheet" href="./vendor/phosphor-icons-2.1.1/fill/style.css">
 <style>
   html, body { margin: 0; padding: 0; background: #161826; }
   a { color: #e9e9ed; text-decoration: none; }
