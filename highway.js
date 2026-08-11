@@ -53,24 +53,28 @@ function fitFont(g, text, start, max, family) {
 
 /** Distance board: black on yellow, two posts, facing oncoming traffic (+Z). */
 function signboard(name, devLine, latinLine) {
+  // 2048x896, double the old size — these are read at a glance as they rush past,
+  // and the smaller texture went soft. Laid out as fractions of W/H so the numbers
+  // stay in step with the canvas.
+  const W = 2048, H = 896, FIT = W * 0.84;
   const cv = document.createElement('canvas');
-  cv.width = 1024; cv.height = 448;
+  cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
   g.fillStyle = '#f0c02f';
-  g.fillRect(0, 0, 1024, 448);
+  g.fillRect(0, 0, W, H);
   g.strokeStyle = '#15150f';
-  g.lineWidth = 16;
-  g.strokeRect(24, 24, 976, 400);
+  g.lineWidth = W * 0.0156;
+  g.strokeRect(W * 0.023, H * 0.054, W * 0.954, H * 0.893);
   g.fillStyle = '#15150f';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   // fitFont only knows what measureText reports for the font resolved right now,
   // and devices resolve different Devanagari faces. The maxWidth argument is what
   // actually guarantees the line cannot overrun the canvas and get clipped.
-  fitFont(g, devLine, 150, 860, DEV_FONT);
-  g.fillText(devLine, 512, 165, 860);
-  fitFont(g, latinLine, 122, 860, 'Arial, Helvetica, sans-serif');
-  g.fillText(latinLine, 512, 306, 860);
+  fitFont(g, devLine, H * 0.335, FIT, DEV_FONT);
+  g.fillText(devLine, W / 2, H * 0.368, FIT);
+  fitFont(g, latinLine, H * 0.272, FIT, 'Arial, Helvetica, sans-serif');
+  g.fillText(latinLine, W / 2, H * 0.683, FIT);
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
