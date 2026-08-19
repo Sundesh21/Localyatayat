@@ -18,23 +18,11 @@ env:
   # Until it is set, the cache-invalidation step below is skipped automatically.
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build (Vite)
-        run: npm run build   # outputs to ./dist
 
       - name: Configure AWS credentials (keyless OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -42,8 +30,12 @@ jobs:
           role-to-assume: arn:aws:iam::255399219125:role/github-actions-localyatayat-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload build to S3
-        run: aws s3 sync ./dist s3://${{ env.S3_BUCKET }} --delete
+      - name: Upload site files to S3
+        run: |
+          aws s3 sync . s3://${{ env.S3_BUCKET }} --delete \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "README.md"
 
       - name: Invalidate CloudFront cache (skipped until distribution exists)
         if: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID != '' }}
