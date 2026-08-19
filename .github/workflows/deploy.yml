@@ -1,12 +1,10 @@
 name: Deploy to AWS (S3 + CloudFront)
 
-# Run on every push to the main branch
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}   # also lets you run it manually from the Actions tab
+  workflow_dispatch: {}
 
-# Required for keyless OIDC auth to AWS
 permissions:
   id-token: write
   contents: read
@@ -14,8 +12,6 @@ permissions:
 env:
   AWS_REGION: ap-south-1
   S3_BUCKET: localyatayat
-  # Leave the CloudFront ID as a repo Variable named CLOUDFRONT_DISTRIBUTION_ID.
-  # Until it is set, the cache-invalidation step below is skipped automatically.
 
 jobs:
   deploy:
@@ -23,6 +19,28 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # ---- TEMPORARY DEBUG STEP: prints what GitHub actually sends ----
+      # Remove this step once auth is working.
+      - name: Print OIDC token claims (debug)
+        run: |
+          TOKEN=$(curl -sSL \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+            | python3 -c "import sys,json;print(json.load(sys.stdin)['value'])")
+          echo "$TOKEN" | python3 -c "
+          import sys,base64,json
+          t=sys.stdin.read().strip().split('.')[1]
+          t+='='*(-len(t)%4)
+          d=json.loads(base64.urlsafe_b64decode(t))
+          print('==== TOKEN CLAIMS ====')
+          print('SUB  =', d.get('sub'))
+          print('AUD  =', d.get('aud'))
+          print('REPO =', d.get('repository'))
+          print('REF  =', d.get('ref'))
+          print('======================')
+          "
+      # ---------------------------------------------------------------
 
       - name: Configure AWS credentials (keyless OIDC)
         uses: aws-actions/configure-aws-credentials@v4
